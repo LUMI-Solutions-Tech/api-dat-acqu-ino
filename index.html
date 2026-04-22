@@ -11,58 +11,48 @@
     <h1>Graphics</h1>
     <div style="display: flex;">
         <div style="width: 50%;">
-            <canvas id="sensorAnalogico"></canvas>
+            <canvas id="sensorLux"></canvas>
         </div>
         <div style="width: 50%;">
-            <canvas id="sensorDigital"></canvas>
+            <canvas id="sensorPpfd"></canvas>
         </div>
     </div>
 
     <script>
-        var sensorAnalogico = new Chart(document.getElementById('sensorAnalogico').getContext('2d'), {
+        var sensorLux = new Chart(document.getElementById('sensorLux').getContext('2d'), {
             type: 'line',
             data: {
                 datasets: [{
-                    label: 'Analogico',
+                    label: 'Lux',
                     borderColor: '#63B1BC',
                     backgroundColor: '#ED145B'
                 }]
             },
             options: {
                 scales: {
-                    x: {
-                        beginAtZero: true
-                    },
+                    x: { beginAtZero: true },
                     y: {
-                        title: {
-                            display: true,
-                            text: '(%)'
-                        },
+                        title: { display: true, text: 'Lux' },
                         beginAtZero: true,
                     },
                 },
             }
         });
 
-        var sensorDigital = new Chart(document.getElementById('sensorDigital').getContext('2d'), {
+        var sensorPpfd = new Chart(document.getElementById('sensorPpfd').getContext('2d'), {
             type: 'line',
             data: {
                 datasets: [{
-                    label: 'Digital',
+                    label: 'PPFD',
                     borderColor: '#63B1BC',
                     backgroundColor: '#0762C8'
                 }]
             },
             options: {
                 scales: {
-                    x: {
-                        beginAtZero: true
-                    },
+                    x: { beginAtZero: true },
                     y: {
-                        title: {
-                            display: true,
-                            text: '(0-1)'
-                        },
+                        title: { display: true, text: 'PPFD (µmol/m²/s)' },
                         beginAtZero: true
                     }
                 }
@@ -72,37 +62,41 @@
         var paginacao = {};
         var tempo = {};
 
-        function obterDados(grafico, endpoint) {
-            fetch('http://localhost:3300/sensores/' + endpoint)
+        function obterDados(graficoLux, graficoPpfd) {
+            fetch('http://localhost:3300/sensores/analogico')
                 .then(response => response.json())
                 .then(valores => {
-                    if (paginacao[endpoint] == null) {
-                        paginacao[endpoint] = 0;
-                    }
-                    if (tempo[endpoint] == null) {
-                        tempo[endpoint] = 0;
-                    }
+                    if (paginacao['analogico'] == null) paginacao['analogico'] = 0;
+                    if (tempo['analogico'] == null) tempo['analogico'] = 0;
 
-                    var ultimaPaginacao = paginacao[endpoint];
-                    paginacao[endpoint] = valores.length;
+                    var ultimaPaginacao = paginacao['analogico'];
+                    paginacao['analogico'] = valores.length;
                     valores = valores.slice(ultimaPaginacao);
 
                     valores.forEach((valor) => {
-                        if (grafico.data.labels.length == 10 && grafico.data.datasets[0].data.length == 10) {
-                            grafico.data.labels.shift();
-                            grafico.data.datasets[0].data.shift();
+                        // mantém apenas os últimos 10 pontos no gráfico
+                        if (graficoLux.data.labels.length == 10) {
+                            graficoLux.data.labels.shift();
+                            graficoLux.data.datasets[0].data.shift();
+                            graficoPpfd.data.labels.shift();
+                            graficoPpfd.data.datasets[0].data.shift();
                         }
 
-                        grafico.data.labels.push(tempo[endpoint]++);
-                        grafico.data.datasets[0].data.push(parseFloat(valor));
-                        grafico.update();
+                        graficoLux.data.labels.push(tempo['analogico']);
+                        graficoLux.data.datasets[0].data.push(valor.lux);
+
+                        graficoPpfd.data.labels.push(tempo['analogico']++);
+                        graficoPpfd.data.datasets[0].data.push(valor.ppfd);
+
+                        graficoLux.update();
+                        graficoPpfd.update();
                     });
                 })
                 .catch(error => console.error('Erro ao obter dados:', error));
         }
 
         setInterval(() => {
-            obterDados(sensorAnalogico, 'analogico');
+            obterDados(sensorLux, sensorPpfd);
         }, 1000);
 
     </script>

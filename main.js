@@ -62,6 +62,7 @@ const serial = async (valoresSensorLuminosidade) => {
         console.log("Valor recebido:", data);
 
         const valorAnalogico = parseFloat(data.split(":")[1]);
+
         // verifica se o valor recebido é válido
         if (isNaN(valorAnalogico)) {
           console.log("Valor inválido recebido do Arduino.");
@@ -106,14 +107,14 @@ const serial = async (valoresSensorLuminosidade) => {
         // insere os dados no banco de dados
         if (HABILITAR_OPERACAO_INSERIR) {
           await poolBancoDados.execute(
-            "INSERT INTO Leituras (fk_sensor, lux, ppfd, data_hora) VALUES (?, ?, ?, NOW())",
+            "INSERT INTO Leituras (fkSensor, lux, unMed, dataHora) VALUES (?, ?, ?, NOW())",
             [ID_SENSOR, sensorLuminosidade, ppfd],
           );
 
           console.log("Valores inseridos no banco:", {
-            id_Sensor: ID_SENSOR,
+            fkSensor: ID_SENSOR,
             lux: sensorLuminosidade,
-            ppfd: ppfd,
+            unMed: ppfd,
           });
         }
       } catch (erro) {
