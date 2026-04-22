@@ -23,7 +23,7 @@ const serial = async (valoresSensorLuminosidade) => {
   let poolBancoDados = mysql
     .createPool({
       host: "localhost",
-      user: "aluno",
+      user: "lumi_insert",
       password: "Lumiinsert@2026",
       database: "sistema_lumi",
       port: 3307,
@@ -33,7 +33,7 @@ const serial = async (valoresSensorLuminosidade) => {
   // lista as portas seriais disponíveis e procura pelo Arduino
   const portas = await serialport.SerialPort.list();
   const portaArduino = portas.find(
-    (porta) => porta.vendorId == 2341 && porta.productId == 43
+    (porta) => porta.vendorId == 2341 && porta.productId == 43,
   );
 
   // se não encontrar o Arduino, mostra erro
@@ -50,7 +50,7 @@ const serial = async (valoresSensorLuminosidade) => {
   // evento quando a porta serial é aberta
   arduino.on("open", () => {
     console.log(
-      `A leitura do arduino foi iniciada na porta ${portaArduino.path} utilizando Baud Rate de ${SERIAL_BAUD_RATE}`
+      `A leitura do arduino foi iniciada na porta ${portaArduino.path} utilizando Baud Rate de ${SERIAL_BAUD_RATE}`,
     );
   });
 
@@ -61,8 +61,7 @@ const serial = async (valoresSensorLuminosidade) => {
       try {
         console.log("Valor recebido:", data);
 
-        const valorAnalogico = parseFloat(data.trim());
-
+        const valorAnalogico = parseFloat(data.split(":")[1]);
         // verifica se o valor recebido é válido
         if (isNaN(valorAnalogico)) {
           console.log("Valor inválido recebido do Arduino.");
@@ -108,7 +107,7 @@ const serial = async (valoresSensorLuminosidade) => {
         if (HABILITAR_OPERACAO_INSERIR) {
           await poolBancoDados.execute(
             "INSERT INTO Leituras (fk_sensor, lux, ppfd, data_hora) VALUES (?, ?, ?, NOW())",
-            [ID_SENSOR, sensorLuminosidade, ppfd]
+            [ID_SENSOR, sensorLuminosidade, ppfd],
           );
 
           console.log("Valores inseridos no banco:", {
@@ -137,7 +136,7 @@ const servidor = (valoresSensorLuminosidade) => {
     response.header("Access-Control-Allow-Origin", "*");
     response.header(
       "Access-Control-Allow-Headers",
-      "Origin, Content-Type, Accept"
+      "Origin, Content-Type, Accept",
     );
     next();
   });
