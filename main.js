@@ -10,8 +10,7 @@ const SERVIDOR_PORTA = 3300;
 // habilita ou desabilita a inserção de dados no banco de dados
 const HABILITAR_OPERACAO_INSERIR = true;
 
-// fator de conversão de lux para PPFD
-// valor aproximado para LED Full Spectrum
+// fator de conversão para PPFD
 const FATOR_LUX_PARA_PPFD = 0.0185;
 
 // ID do sensor cadastrado no banco
@@ -35,8 +34,6 @@ const serial = async (valoresSensorLuminosidade) => {
   const portaArduino = portas.find(
     (porta) => porta.vendorId == 2341 && porta.productId == 43,
   );
-
-  // se não encontrar o Arduino, mostra erro
   if (!portaArduino) {
     throw new Error("O arduino não foi encontrado em nenhuma porta serial");
   }
@@ -58,73 +55,37 @@ const serial = async (valoresSensorLuminosidade) => {
   arduino
     .pipe(new serialport.ReadlineParser({ delimiter: "\r\n" }))
     .on("data", async (data) => {
-      try {
-        console.log("Valor recebido:", data);
+      console.log(data);
+      // Antes: const valorAnalogico = parseFloat(data.split(':')[1]);
+      const valorAnalogico = parseFloat(data); // Captura o número diretamente
 
-        const valorAnalogico = parseFloat(data.split(":")[1]);
+      // calcula o PPFD com base no valor analógico
+      const ppfd = valorAnalogico * FATOR_LUX_PARA_PPFD; 7
+      const ppfdFormatado = ppfd.toFixed(2)
 
-        // verifica se o valor recebido é válido
-        if (isNaN(valorAnalogico)) {
-          console.log("Valor inválido recebido do Arduino.");
-          return;
-        }
+      // armazena os valores do sensor no array
+      valoresSensorLuminosidade.push({
+        valorAnalogico: valorAnalogico,
+        ppfd: ppfd,
+        dataHora: new Date(),
+      });
 
-        // ============================
-        // CONVERSÃO DE ANALÓGICO PARA LUX
-        // ============================
-
-        // converte a leitura analógica em tensão
-        const tensao = valorAnalogico * (5.0 / 1023.0);
-
-        // variável que vai guardar o valor de lux
-        let sensorLuminosidade = 0;
-
-        // evita divisão por zero
-        if (tensao > 0) {
-          // calcula a resistência do LDR
-          const resistenciaLDR = 10000.0 * (5.0 / tensao - 1.0);
-
-          // converte a resistência em lux
-          sensorLuminosidade = 500.0 / (resistenciaLDR / 1000.0);
-        }
-
-        // calcula o PPFD com base no lux
-        const ppfd = sensorLuminosidade * FATOR_LUX_PARA_PPFD;
-
-        // armazena os dados no array
-        valoresSensorLuminosidade.push({
-          valorAnalogico: valorAnalogico,
-          lux: sensorLuminosidade,
-          ppfd: ppfd,
-          dataHora: new Date(),
-        });
-
-        // mantém apenas os últimos 100 registros
-        if (valoresSensorLuminosidade.length > 100) {
-          valoresSensorLuminosidade.shift();
-        }
-
-        // insere os dados no banco de dados
-        if (HABILITAR_OPERACAO_INSERIR) {
-          await poolBancoDados.execute(
-            "INSERT INTO Leituras (fkSensor, lux, unMed, dataHora) VALUES (?, ?, ?, NOW())",
-            [ID_SENSOR, sensorLuminosidade, ppfd],
-          );
-
-          console.log("Valores inseridos no banco:", {
-            fkSensor: ID_SENSOR,
-            lux: sensorLuminosidade,
-            unMed: ppfd,
-          });
-        }
-      } catch (erro) {
-        console.error("Erro ao processar leitura:", erro.message);
+      // insere os dados no banco de dados (se habilitado)
+      if (HABILITAR_OPERACAO_INSERIR) {
+        await poolBancoDados.execute(
+          "INSERT INTO Leituras (fkSensor, lux, ppfd, dataHora) VALUES (?, ?, ?, NOW())",
+          [ID_SENSOR, valorAnalogico, ppfdFormatado],
+        );
+        console.log(
+          "valores inseridos no banco: ",
+          valorAnalogico + ", " + ppfdFormatado,
+        );
       }
     });
 
   // evento para lidar com erros na comunicação serial
   arduino.on("error", (mensagem) => {
-    console.error(`Erro no Arduino (Mensagem: ${mensagem})`);
+    console.error(`Erro no arduino (Mensagem: ${mensagem}`);
   });
 };
 
@@ -132,35 +93,20 @@ const serial = async (valoresSensorLuminosidade) => {
 const servidor = (valoresSensorLuminosidade) => {
   const app = express();
 
-  // configurações de requisição e resposta
-  app.use((request, response, next) => {
-    response.header("Access-Control-Allow-Origin", "*");
-    response.header(
-      "Access-Control-Allow-Headers",
-      "Origin, Content-Type, Accept",
-    );
-    next();
-  });
-
   // inicia o servidor na porta especificada
   app.listen(SERVIDOR_PORTA, () => {
     console.log(`API executada com sucesso na porta ${SERVIDOR_PORTA}`);
   });
 
-  // endpoint da API
+  // define o endpoint da API
   app.get("/sensores/analogico", (_, response) => {
     return response.json(valoresSensorLuminosidade);
-  });
-
-  // rota de teste
-  app.get("/", (_, response) => {
-    return response.send("API do Farmino funcionando 🌱");
   });
 };
 
 // função principal assíncrona para iniciar a comunicação serial e o servidor web
 (async () => {
-  // array para armazenar os valores dos sensores
+  // array para armazenar os valores do sensor
   const valoresSensorLuminosidade = [];
 
   // inicia a comunicação serial
