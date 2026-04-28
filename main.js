@@ -93,6 +93,13 @@ const serial = async (valoresSensorLuminosidade) => {
 const servidor = (valoresSensorLuminosidade) => {
   const app = express();
 
+  // configurações de requisição e resposta
+    app.use((request, response, next) => {
+        response.header('Access-Control-Allow-Origin', '*');
+        response.header('Access-Control-Allow-Headers', 'Origin, Content-Type, Accept');
+        next();
+    });
+
   // inicia o servidor na porta especificada
   app.listen(SERVIDOR_PORTA, () => {
     console.log(`API executada com sucesso na porta ${SERVIDOR_PORTA}`);

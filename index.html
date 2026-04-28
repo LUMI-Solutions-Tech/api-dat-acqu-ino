@@ -1,105 +1,86 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
-
 <head>
-    <title>Graphics</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
+  <title>PPFD</title>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
 <body>
 
-    <h1>Graphics</h1>
-    <div style="display: flex;">
-        <div style="width: 50%;">
-            <canvas id="sensorLux"></canvas>
-        </div>
-        <div style="width: 50%;">
-            <canvas id="sensorPpfd"></canvas>
-        </div>
-    </div>
+<canvas id="chartPpfd"></canvas>
 
-    <script>
-        var sensorLux = new Chart(document.getElementById('sensorLux').getContext('2d'), {
-            type: 'line',
-            data: {
-                datasets: [{
-                    label: 'Lux',
-                    borderColor: '#63B1BC',
-                    backgroundColor: '#ED145B'
-                }]
-            },
-            options: {
-                scales: {
-                    x: { beginAtZero: true },
-                    y: {
-                        title: { display: true, text: 'Lux' },
-                        beginAtZero: true,
-                    },
-                },
-            }
-        });
+<script>
+// Criação do gráfico de linha
+var chartPpfd = new Chart(document.getElementById('chartPpfd').getContext('2d'), {
+  type: 'line', // tipo do gráfico (linha)
+  data: {
+    labels: [], // eixo X 
+    datasets: [
+      {
+        label: 'PPFD (µmol/m²/s)', // nome da linha no gráfico
+        data: [], // valores do gráfico 
+        borderColor: '#378ADD', 
+        fill: false 
+      },
+    ]
+  },
+  options: {
+    scales: {
+      y: {
+        min: 0,  
+        max: 20,  
+        title: {
+          display: true,
+          text: 'µmol/m²/s' 
+        }
+      }
+    }
+  }
+});
 
-        var sensorPpfd = new Chart(document.getElementById('sensorPpfd').getContext('2d'), {
-            type: 'line',
-            data: {
-                datasets: [{
-                    label: 'PPFD',
-                    borderColor: '#63B1BC',
-                    backgroundColor: '#0762C8'
-                }]
-            },
-            options: {
-                scales: {
-                    x: { beginAtZero: true },
-                    y: {
-                        title: { display: true, text: 'PPFD (µmol/m²/s)' },
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
+// Variável usada para controlar quais dados já foram exibidos
+var paginacao = 0;
 
-        var paginacao = {};
-        var tempo = {};
+// Função que busca dados do servidor
+function obterDados() {
+  fetch('http://localhost:3300/sensores/analogico') // faz requisição para API
+    .then(function(response) { return response.json(); }) // converte resposta para JSON
+    .then(function(valores) {
 
-        function obterDados(graficoLux, graficoPpfd) {
-            fetch('http://localhost:3300/sensores/analogico')
-                .then(response => response.json())
-                .then(valores => {
-                    if (paginacao['analogico'] == null) paginacao['analogico'] = 0;
-                    if (tempo['analogico'] == null) tempo['analogico'] = 0;
+      // Pega apenas os dados novos 
+      var novos = valores.slice(paginacao);
 
-                    var ultimaPaginacao = paginacao['analogico'];
-                    paginacao['analogico'] = valores.length;
-                    valores = valores.slice(ultimaPaginacao);
+      // Atualiza a paginação com o total de dados recebidos
+      paginacao = valores.length;
 
-                    valores.forEach((valor) => {
-                        // mantém apenas os últimos 10 pontos no gráfico
-                        if (graficoLux.data.labels.length == 10) {
-                            graficoLux.data.labels.shift();
-                            graficoLux.data.datasets[0].data.shift();
-                            graficoPpfd.data.labels.shift();
-                            graficoPpfd.data.datasets[0].data.shift();
-                        }
+      // Percorre cada novo valor 
+      novos.forEach(function(valor) {
 
-                        graficoLux.data.labels.push(tempo['analogico']);
-                        graficoLux.data.datasets[0].data.push(valor.lux);
-
-                        graficoPpfd.data.labels.push(tempo['analogico']++);
-                        graficoPpfd.data.datasets[0].data.push(valor.ppfd);
-
-                        graficoLux.update();
-                        graficoPpfd.update();
-                    });
-                })
-                .catch(error => console.error('Erro ao obter dados:', error));
+        // Mantém no máximo 10 pontos no gráfico
+        if (chartPpfd.data.labels.length >= 10) {
+          chartPpfd.data.labels.shift(); // remove o primeiro label
+          chartPpfd.data.datasets[0].data.shift(); // remove o primeiro valor
         }
 
-        setInterval(() => {
-            obterDados(sensorLux, sensorPpfd);
-        }, 1000);
+        // Adiciona novo ponto no eixo X 
+        chartPpfd.data.labels.push(paginacao++);
 
-    </script>
+        // Adiciona valor do PPFD no gráfico (
+        chartPpfd.data.datasets[0].data.push(parseFloat(valor.ppfd));
+
+        // Atualiza o gráfico na tela
+        chartPpfd.update();
+      });
+    })
+    .catch(function(error) { 
+      // Caso dê erro na requisição
+      console.error('Erro:', error); 
+    });
+}
+
+// Executa a função a cada 1 segundo (1000 ms)
+setInterval(obterDados, 1000);
+</script>
+
 </body>
-
 </html>
