@@ -1,124 +1,161 @@
-// importa as bibliotecas necessárias
 const serialport = require("serialport");
 const express = require("express");
 const mysql = require("mysql2");
 
-// constantes para configurações
 const SERIAL_BAUD_RATE = 9600;
 const SERVIDOR_PORTA = 3300;
 
-// habilita ou desabilita a inserção de dados no banco de dados
 const HABILITAR_OPERACAO_INSERIR = true;
 
-// fator de conversão para PPFD
 const FATOR_LUX_PARA_PPFD = 0.0185;
 
-// ID do sensor cadastrado no banco
-const ID_SENSOR = 1;
+// Gera uma pequena variação aleatória
+function variacao(valor, porcentagem) {
+  const fator = 1 + (Math.random() * porcentagem * 2 - porcentagem) / 100;
 
-// função para comunicação serial
+  return valor * fator;
+}
+
 const serial = async (valoresSensorLuminosidade) => {
-  // conexão com o banco de dados MySQL
-  let poolBancoDados = mysql
+  const poolBancoDados = mysql
     .createPool({
       host: "localhost",
-      user: "lumi_insert",
-      password: "Lumiinsert@2026",
-      database: "sistema_lumi",
-      port: 3307,
+      user: "root",
+      password: "root",
+      database: "lumi_sprint_3",
+      port: 3306,
     })
     .promise();
 
-  // lista as portas seriais disponíveis e procura pelo Arduino
+  // Teste da conexão com o banco
+  try {
+    const conexao = await poolBancoDados.getConnection();
+    console.log("BANCO CONECTADO COM SUCESSO");
+    conexao.release();
+  } catch (erro) {
+    console.error("ERRO AO CONECTAR NO MYSQL:");
+    console.error(erro);
+    return;
+  }
+
   const portas = await serialport.SerialPort.list();
+
   const portaArduino = portas.find(
-    (porta) => porta.vendorId == 2341 && porta.productId == 43,
+    (porta) => porta.vendorId == 2341 || porta.vendorId == "2341",
   );
+
   if (!portaArduino) {
     throw new Error("O arduino não foi encontrado em nenhuma porta serial");
   }
 
-  // configura a porta serial com o baud rate especificado
   const arduino = new serialport.SerialPort({
     path: portaArduino.path,
     baudRate: SERIAL_BAUD_RATE,
   });
 
-  // evento quando a porta serial é aberta
   arduino.on("open", () => {
     console.log(
-      `A leitura do arduino foi iniciada na porta ${portaArduino.path} utilizando Baud Rate de ${SERIAL_BAUD_RATE}`,
+      `Leitura iniciada na porta ${portaArduino.path} utilizando Baud Rate ${SERIAL_BAUD_RATE}`,
     );
   });
 
-  // processa os dados recebidos do Arduino
   arduino
     .pipe(new serialport.ReadlineParser({ delimiter: "\r\n" }))
     .on("data", async (data) => {
-      console.log(data);
-      // Antes: const valorAnalogico = parseFloat(data.split(':')[1]);
-      const valorAnalogico = parseFloat(data); // Captura o número diretamente
+      try {
+        console.log("Valor recebido:", data);
 
-      // calcula o PPFD com base no valor analógico
-      const ppfd = valorAnalogico * FATOR_LUX_PARA_PPFD; 7
-      const ppfdFormatado = ppfd.toFixed(2)
+        const valorAnalogico = parseFloat(data);
 
-      // armazena os valores do sensor no array
-      valoresSensorLuminosidade.push({
-        valorAnalogico: valorAnalogico,
-        ppfd: ppfd,
-        dataHora: new Date(),
-      });
+        if (isNaN(valorAnalogico)) {
+          console.log("Valor inválido recebido.");
+          return;
+        }
 
-      // insere os dados no banco de dados (se habilitado)
-      if (HABILITAR_OPERACAO_INSERIR) {
-        await poolBancoDados.execute(
-          "INSERT INTO Leituras (fkSensor, lux, ppfd, dataHora) VALUES (?, ?, ?, NOW())",
-          [ID_SENSOR, valorAnalogico, ppfdFormatado],
-        );
-        console.log(
-          "valores inseridos no banco: ",
-          valorAnalogico + ", " + ppfdFormatado,
-        );
+        // Simulação de 4 sensores
+        const sensores = [
+          { id: 1, lux: valorAnalogico * 18 + Math.random() * 50 },
+          { id: 2, lux: valorAnalogico * 32 + Math.random() * 50 },
+          { id: 3, lux: valorAnalogico * 17 + Math.random() * 50 },
+          { id: 4, lux: valorAnalogico * 16 + Math.random() * 50 },
+        ];
+
+        let proximoId = 1;
+
+        if (HABILITAR_OPERACAO_INSERIR) {
+          const [resultado] = await poolBancoDados.execute(
+            `SELECT COALESCE(MAX(idLeituras), 0) AS ultimoId
+             FROM Leituras`,
+          );
+
+          proximoId = resultado[0].ultimoId + 1;
+        }
+
+        for (const sensor of sensores) {
+          const lux = Number(sensor.lux.toFixed(2));
+          const ppfd = Number((lux * FATOR_LUX_PARA_PPFD).toFixed(2));
+          const dli = Number((ppfd / 18).toFixed(1));
+
+          valoresSensorLuminosidade.push({
+            idLeitura: proximoId,
+            fkSensor: sensor.id,
+            lux,
+            ppfd,
+            dli,
+            dataHora: new Date(),
+          });
+
+          if (valoresSensorLuminosidade.length > 100) {
+            valoresSensorLuminosidade.shift();
+          }
+
+          if (HABILITAR_OPERACAO_INSERIR) {
+            await poolBancoDados.execute(
+              `INSERT INTO Leituras (idLeituras, fkSensor, lux, ppfd, dli, dataHora) 
+                VALUES (?, ?, ?, ?, ?, NOW())`,
+              [proximoId, sensor.id, Math.round(lux), Math.round(ppfd), dli], 
+            );
+
+            console.log(
+              `Leitura ${proximoId} | Sensor ${sensor.id} | Lux ${lux} | PPFD ${ppfd} | DLI ${dli}`,
+            );
+
+            proximoId++;
+          }
+        }
+      } catch (erro) {
+        console.error("Erro ao processar leitura:");
+        console.error(erro);
       }
     });
 
-  // evento para lidar com erros na comunicação serial
-  arduino.on("error", (mensagem) => {
-    console.error(`Erro no arduino (Mensagem: ${mensagem}`);
+  arduino.on("error", (erro) => {
+    console.error("Erro no Arduino:", erro.message);
   });
 };
 
-// função para criar e configurar o servidor web
 const servidor = (valoresSensorLuminosidade) => {
   const app = express();
 
-  // configurações de requisição e resposta
-    app.use((request, response, next) => {
-        response.header('Access-Control-Allow-Origin', '*');
-        response.header('Access-Control-Allow-Headers', 'Origin, Content-Type, Accept');
-        next();
-    });
+  app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept");
+    next();
+  });
 
-  // inicia o servidor na porta especificada
   app.listen(SERVIDOR_PORTA, () => {
     console.log(`API executada com sucesso na porta ${SERVIDOR_PORTA}`);
   });
 
-  // define o endpoint da API
   app.get("/sensores/analogico", (_, response) => {
-    return response.json(valoresSensorLuminosidade);
+    response.json(valoresSensorLuminosidade);
   });
 };
 
-// função principal assíncrona para iniciar a comunicação serial e o servidor web
 (async () => {
-  // array para armazenar os valores do sensor
   const valoresSensorLuminosidade = [];
 
-  // inicia a comunicação serial
   await serial(valoresSensorLuminosidade);
 
-  // inicia o servidor web
   servidor(valoresSensorLuminosidade);
 })();
