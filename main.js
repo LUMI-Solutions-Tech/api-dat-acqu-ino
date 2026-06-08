@@ -19,11 +19,11 @@ function variacao(valor, porcentagem) {
 const serial = async (valoresSensorLuminosidade) => {
   const poolBancoDados = mysql
     .createPool({
-      host: "localhost",
-      user: "root",
-      password: "root",
+      host: "10.18.32.52",
+      user: "lumi_db",
+      password: "Lumi_insert1234%",
       database: "lumi_sprint_3",
-      port: 3306,
+      port: 3307,
     })
     .promise();
 
